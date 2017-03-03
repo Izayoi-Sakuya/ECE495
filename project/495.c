@@ -49,8 +49,7 @@ typedef struct{
 	uint8_t bass;
 	uint8_t mid;
 	uint8_t treble;
-	uint8_t Voll;
-	uint8_t Volr;
+	uint8_t Vol;
     int balance;
 }Equalizer;
 Equalizer EQ;
@@ -301,8 +300,8 @@ int main(void)
     EQ.bass = 127;
     EQ.mid = 127;
     EQ.treble = 127;
-    EQ.Voll = 127;
-    EQ.Volr = 127;
+    EQ.Vol = 127;
+    EQ.Vol = 127;
     EQ.balance = 127;
     balfact_l= 1;
     balfact_r= 1;
@@ -382,6 +381,10 @@ void AdjustEQ(tWidget *pWidget, int32_t lValue){
             balfact_r = 1;
         }
     }
+    else if(pWidget == (tWidget*)&SliderList[4]){
+    	SliderNum = 5;
+    	EQ.Vol = lValue;
+    }
     if ((EQparam2 >= 0) && (EQparam1 >= 0) && (SliderNum <= 3)){
         usprintf(pcSliderText, "+%d.%d", EQparam1, EQparam2);
     }
@@ -402,22 +405,26 @@ void AdjustEQ(tWidget *pWidget, int32_t lValue){
             usprintf(pcSliderText, "100%%");
         }
     }
+    else if (SliderNum == 5){
+    	usprintf(pcSliderText, "%d%%",(int)(EQ.Vol*100/255));
+    }
     SliderTextSet(&SliderList[SliderNum - 1], pcSliderText);
     WidgetPaint((tWidget*)&SliderList[SliderNum - 1]);
     UpdateEQ(EQ);
 }
 // Send data to digipots
 void i2cSend(int addr, int data1, int data2){
-	  I2CMasterSlaveAddrSet(I2C2_BASE, (uint8_t)addr, false); 
+	I2CMasterSlaveAddrSet(I2C2_BASE, (uint8_t)addr, false);
 
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_START);
-    I2CMasterDataPut(I2C2_BASE, (uint8_t)0x10);
+    I2CMasterDataPut(I2C2_BASE, (uint8_t)0x00);
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_CONT);
     while(I2CMasterBusy(I2C2_BASE)){}
     I2CMasterDataPut(I2C2_BASE, (uint8_t)(data1));
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
     while(I2CMasterBusy(I2C2_BASE)){}
 
+    I2CMasterSlaveAddrSet(I2C2_BASE, (uint8_t)addr, false);
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_START);
     I2CMasterDataPut(I2C2_BASE, (uint8_t)0x80);
     I2CMasterControl(I2C2_BASE, I2C_MASTER_CMD_BURST_SEND_CONT);
@@ -431,13 +438,13 @@ void UpdateEQ(){
     // 00: Base L/R; 01: Mid L/R; 10: Treble L/R; 11: Volume L/R
 
     // Bass 00
-	i2cSend(0x58,EQ.bass,EQ.bass);
+	i2cSend(0x2C,EQ.bass,EQ.bass);
     // Mid 01
-    i2cSend(0x5A,EQ.mid,EQ.mid);
+    i2cSend(0x2D,EQ.mid,EQ.mid);
 		// Tre 10
-	i2cSend(0x5C,EQ.mid,EQ.mid);
+	i2cSend(0x2E,EQ.treble,EQ.treble);
 		// Vol 11
-	i2cSend(0x5E,EQ.Voll*balfactr_l,EQ.Volr*balfact_r);
+	i2cSend(0x2F,EQ.Vol*balfact_l,EQ.Vol*balfact_r);
 }
 
 // Functions to switch between panels
