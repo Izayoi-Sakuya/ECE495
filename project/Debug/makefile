@@ -13,9 +13,9 @@ ORDERED_OBJS += \
 "./tm4c123gh6pm_startup_ccs.obj" \
 "./touch.obj" \
 "./ustdlib.obj" \
+"../495.cmd" \
 "C:/ti/TivaWare_C_Series-2.1.1.71/driverlib/ccs/Debug/driverlib.lib" \
 "C:/ti/TivaWare_C_Series-2.1.1.71/grlib/ccs/Debug/grlib.lib" \
-"../grlib_demo_ccs.cmd" \
 $(GEN_CMDS__FLAG) \
 -l"C:\ti\TivaWare_C_Series-2.1.1.71\grlib\ccs\Debug\grlib.lib" \
 -l"libc.a" \
