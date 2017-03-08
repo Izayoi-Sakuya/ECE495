@@ -31,8 +31,10 @@
 #include "utils/ustdlib.h"
 #include "Kentec320x240x16_ssd2119_8bit.h"
 #include "touch.h"
-#include "images.h"
+#define VUrate 3
+#define VUfreq 100
 #define PI 3.1415926
+#define BufferSize VUfreq/VUrate
 
 // The DMA control structure table.
 #ifdef ewarm
@@ -52,7 +54,7 @@ typedef struct{
 	uint8_t Vol;
     int balance;
 }Equalizer;
-Equalizer EQ;
+
 // fcn
 void goVU(tWidget *pWidget);
 void goEQ(tWidget *pWidget);
@@ -69,21 +71,22 @@ void i2cSend(int,int,int);
 
 // var
 extern tCanvasWidget PanelList[];
-int Balance;
-int PanelNum;
-int SliderNum;
-int EQparam1,EQparam2;
-int VUparam1,VUparam2;
-float balfact_l,balfact_r;
-double VUlog;
-double VU;
+int8_t Balance;
+int8_t PanelNum;
+int8_t SliderNum;
+int8_t EQparam1,EQparam2;
+int8_t VUparam1,VUparam2;
 uint16_t VUct;
-uint32_t ADCCache[2];
-uint32_t ADCFIFO[500];
 uint16_t FIFOptr = 0;
+uint32_t ADCCache[2];
+uint32_t ADCFIFO[BufferSize];
 uint32_t g_ulButtonState;
 tContext sContext;
 tRectangle sRect;
+Equalizer EQ;
+float balfact_l,balfact_r;
+double VUlog;
+double VU;
 
 // The Title panel, which does exactly what you think it does.
 Canvas(g_sMain, PanelList, 0, 0, &g_sKentec320x240x16_SSD2119, 0,
@@ -117,16 +120,14 @@ Canvas(g_sEQ4, PanelList+2, &g_sEQ3, 0,
        CANVAS_STYLE_TEXT, 0, 0, ClrBlack,
        &g_sFontCm18, " Volume ", 0, 0);
 
-
-
 // The names for each of the panels, which is displayed at the bottom of the
 // screen.
-char* PanelNames[] =
+char* PanelNames[4] =
 {
+    "1",
     "Hi-Fi Audio Amplifier",
     "VU Meter",
     "Equalizer",
-
 };
 
 // The buttons and text across the bottom of the screen.
@@ -274,7 +275,7 @@ int main(void)
 	I2CMasterInitExpClk(I2C2_BASE, SysCtlClockGet(), false);
 
 	// TIM init
-	int period = (SysCtlClockGet() / 1000)/ 2;
+	int period = (SysCtlClockGet() / VUfreq)/ 2;
 	SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER2);
 	TimerConfigure(TIMER2_BASE, TIMER_CFG_PERIODIC);
 	TimerIntRegister(TIMER2_BASE, TIMER_A, VUisr);
@@ -301,15 +302,15 @@ int main(void)
     EQ.mid = 127;
     EQ.treble = 127;
     EQ.Vol = 127;
-    EQ.Vol = 127;
-    EQ.balance = 127;
+    EQ.Vol = 128;
+    EQ.balance = 128;
     balfact_l= 1;
     balfact_r= 1;
 
     // Add the first panel to the widget tree.
     PanelNum = 0;
     WidgetAdd(WIDGET_ROOT, (tWidget*)(PanelList+PanelNum));
-    CanvasTextSet(&g_sTitle, PanelNames[PanelNum]);
+    CanvasTextSet(&g_sTitle, PanelNames[PanelNum+1]);
 
     // Issue the initial paint request to the widgets.
     WidgetPaint(WIDGET_ROOT);
@@ -323,6 +324,7 @@ int main(void)
         WidgetMessageQueueProcess();
     }
 }
+
 void SwitchPanel(){
     WidgetAdd(WIDGET_ROOT,(tWidget*)(PanelList + PanelNum));
     WidgetPaint((tWidget*)(tWidget*)(PanelList + PanelNum));
@@ -331,7 +333,7 @@ void SwitchPanel(){
     GrContextForegroundSet(&sContext, ClrWhite);
     GrRectDraw(&sContext, &sRect);
     GrContextFontSet(&sContext, &g_sFontCm20);
-    GrStringDrawCentered(&sContext, PanelNames[PanelNum], -1, GrContextDpyWidthGet(&sContext) / 2, 8, 0);
+    GrStringDrawCentered(&sContext, PanelNames[PanelNum+1], -1, GrContextDpyWidthGet(&sContext) / 2, 8, 0);
     WidgetAdd(WIDGET_ROOT, (tWidget*)&bEQ);
     WidgetAdd(WIDGET_ROOT, (tWidget*)&bStart);
     WidgetAdd(WIDGET_ROOT, (tWidget*)&bVU);
@@ -441,9 +443,9 @@ void UpdateEQ(){
 	i2cSend(0x2C,EQ.bass,EQ.bass);
     // Mid 01
     i2cSend(0x2D,EQ.mid,EQ.mid);
-		// Tre 10
+	// Tre 10
 	i2cSend(0x2E,EQ.treble,EQ.treble);
-		// Vol 11
+	// Vol 11
 	i2cSend(0x2F,EQ.Vol*balfact_l,EQ.Vol*balfact_r);
 }
 
@@ -455,19 +457,21 @@ void goStart(tWidget *pWidget)
     }
     WidgetRemove((tWidget*)(PanelList + PanelNum));
     PanelNum = 0;
+    TimerIntDisable(TIMER2_BASE, TIMER_TIMA_TIMEOUT);
     SwitchPanel();
-	TimerIntDisable(TIMER2_BASE, TIMER_TIMA_TIMEOUT);
 }
 
 void goVU(tWidget *pWidget)
 {
+    static char VUtext[22];
     if(PanelNum == 1){
         return;
     }
     WidgetRemove((tWidget*)(PanelList + PanelNum));
     PanelNum = 1;
     TimerIntEnable(TIMER2_BASE, TIMER_TIMA_TIMEOUT);
-    CanvasTextSet(&g_sVU,"Refreshing Rate: 2 Hz");
+    usprintf(VUtext,"Refreshing Rate: %d Hz", VUrate);
+    CanvasTextSet(&g_sVU, VUtext);
     SwitchPanel();
     WidgetPaint((tWidget*)&g_sVU);
 }
@@ -487,39 +491,68 @@ void goEQ(tWidget *pWidget)
 // Set the value of Sliders when switching into panel EQ                        NEED CHANGE
 void UpdateSliders()
 {
-    static char pcSliderText[5];
+    static char pcSliderText1[6];
+    static char pcSliderText2[6];
+    static char pcSliderText3[6];
+    static char pcSliderText4[5];
+    static char pcSliderText5[5];
+    //Bass
     EQparam1 = ((EQ.bass - 127) *600 / 127) / 100;
     EQparam2 = ((EQ.bass - 127) *600 / 127) % 100;
-    if ((EQparam2 >= 0) && (EQparam1 >= 0) && (SliderNum <= 3)){
-        usprintf(pcSliderText, "+%d.%d", EQparam1, EQparam2);
+    if ((EQparam2 >= 0) && (EQparam1 >= 0)){
+        usprintf(pcSliderText1, "+%d.%d", EQparam1, EQparam2);
     }
-    else if (SliderNum <= 3){
-        usprintf(pcSliderText, "-%d.%d", -EQparam1, -EQparam2);
+    else{
+        usprintf(pcSliderText1, "-%d.%d", -EQparam1, -EQparam2);
     }
-    SliderTextSet(&SliderList[0], pcSliderText);
+    SliderTextSet(&SliderList[0], pcSliderText1);
     WidgetPaint((tWidget*)&SliderList[0]);
 
+    // Mid
     EQparam1 = ((EQ.mid - 127) *600 / 127) / 100;
     EQparam2 = ((EQ.mid - 127) *600 / 127) % 100;
-    if ((EQparam2 >= 0) && (EQparam1 >= 0) && (SliderNum <= 3)){
-        usprintf(pcSliderText, "+%d.%d", EQparam1, EQparam2);
+    if ((EQparam2 >= 0) && (EQparam1 >= 0)){
+        usprintf(pcSliderText2, "+%d.%d", EQparam1, EQparam2);
     }
-    else if (SliderNum <= 3){
-        usprintf(pcSliderText, "-%d.%d", -EQparam1, -EQparam2);
+    else{
+        usprintf(pcSliderText2, "-%d.%d", -EQparam1, -EQparam2);
     }
-    SliderTextSet(&SliderList[1], pcSliderText);
+    SliderTextSet(&SliderList[1], pcSliderText2);
     WidgetPaint((tWidget*)&SliderList[1]);
 
+    // Tre
     EQparam1 = ((EQ.treble - 127) *600 / 127) / 100;
     EQparam2 = ((EQ.treble - 127) *600 / 127) % 100;
-    if ((EQparam2 >= 0) && (EQparam1 >= 0) && (SliderNum <= 3)){
-        usprintf(pcSliderText, "+%d.%d", EQparam1, EQparam2);
+    if ((EQparam2 >= 0) && (EQparam1 >= 0)){
+        usprintf(pcSliderText3, "+%d.%d", EQparam1, EQparam2);
     }
-    else if (SliderNum <= 3){
-        usprintf(pcSliderText, "-%d.%d", -EQparam1, -EQparam2);
+    else{
+        usprintf(pcSliderText3, "-%d.%d", -EQparam1, -EQparam2);
     }
-    SliderTextSet(&SliderList[2], pcSliderText);
+    SliderTextSet(&SliderList[2], pcSliderText3);
     WidgetPaint((tWidget*)&SliderList[2]);
+
+    // Bal
+    if ((balfact_l == 1) && (balfact_r < 1))
+    {
+        usprintf(pcSliderText4, "%d%%R",(int)(balfact_r*100));
+    }
+    else if ((balfact_r == 1) && (balfact_l < 1))
+    {
+        usprintf(pcSliderText4, "%d%%L",(int)(balfact_l*100));
+    }
+    else
+    {
+        usprintf(pcSliderText4, "100%%");
+    }
+    SliderTextSet(&SliderList[3], pcSliderText4);
+    WidgetPaint((tWidget*)&SliderList[3]);
+
+    // Vol
+    usprintf(pcSliderText5, "%d%%",(int)(EQ.Vol*100/255));
+
+    SliderTextSet(&SliderList[4], pcSliderText5);
+    WidgetPaint((tWidget*)&SliderList[4]);
 }
 
 // Functions for each panel
@@ -537,7 +570,7 @@ void PnMain(tWidget* pWidget, tContext* pContext)
 // does exactly same as name suggests
 void VUisr(){
     TimerIntClear(TIMER2_BASE, TIMER_TIMA_TIMEOUT);
-    if (VUct == 500){
+    if (VUct == BufferSize){
         if (PanelNum == 1){
             UpdateVU();
         }
@@ -553,7 +586,7 @@ void SampleVU(){
     while (ADCBusy(ADC1_BASE)){};
     ADCSequenceDataGet(ADC1_BASE, 1, ADCCache);
 
-    if (FIFOptr >= 499){
+    if (FIFOptr > (BufferSize - 1)){
         FIFOptr = 0;
     }
 
@@ -569,11 +602,11 @@ void UpdateVU(){
     double sum;
     uint16_t i;
     static char text[8];
-    for (i = 0;i < 500;i++){
+    for (i = 0;i < (BufferSize - 1);i++){
         sum += (double)ADCFIFO[i] / 4095 * 3.3;
     }
-    VU = sum / 500 / PI * 2.19089023;
-    VUlog = 20 * log10(VU);
+    VU = sum / 5 / BufferSize;
+    VUlog = 20 * log10(VU / PI * 2.19089023);
     VUparam1 = (int)VUlog;
     if (VUlog < 0){
         VUparam2 = -(VUlog - VUparam1) * 100;
@@ -583,6 +616,6 @@ void UpdateVU(){
     }
     usprintf(text, "%d.%d dB VU", VUparam1, VUparam2);
     SliderTextSet(&vum, text);
-	SliderValueSet(&vum, VU * 255 / 3.3);
+	SliderValueSet(&vum, VU * 255 * 2.5);
     WidgetPaint((tWidget*)&vum);
 }
