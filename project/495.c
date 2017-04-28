@@ -31,8 +31,8 @@
 #include "utils/ustdlib.h"
 #include "Kentec320x240x16_ssd2119_8bit.h"
 #include "touch.h"
-#define VUrate 3
-#define VUfreq 100
+#define VUrate 10
+#define VUfreq 200
 #define PI 3.1415926
 #define BufferSize VUfreq/VUrate
 
@@ -79,14 +79,14 @@ int8_t VUparam1,VUparam2;
 uint16_t VUct;
 uint16_t FIFOptr = 0;
 uint32_t ADCCache[2];
-uint32_t ADCFIFO[BufferSize];
+uint32_t ADCFIFOL[BufferSize];
+uint32_t ADCFIFOR[BufferSize];
 uint32_t g_ulButtonState;
 tContext sContext;
 tRectangle sRect;
 Equalizer EQ;
 float balfact_l,balfact_r;
-double VUlog;
-double VU;
+double VUL,VUR;
 
 // The Title panel, which does exactly what you think it does.
 Canvas(g_sMain, PanelList, 0, 0, &g_sKentec320x240x16_SSD2119, 0,
@@ -98,25 +98,26 @@ Canvas(g_sVU, PanelList+1, 0, 0,
        CANVAS_STYLE_TEXT, 0, 0, ClrBlack,
        &g_sFontCm18, "", 0, 0);
 
+
 // The Equalizer panel, which contains an equalizer
 Canvas(g_sEQ, PanelList+2, 0, 0,
        &g_sKentec320x240x16_SSD2119, 210, 30, 60, 40,
        CANVAS_STYLE_TEXT, 0, 0, ClrBlack,
        &g_sFontCm18, " Balance ", 0, 0);
 Canvas(g_sEQ1, PanelList+2, &g_sEQ, 0,
-       &g_sKentec320x240x16_SSD2119, 5, 150, 50, 40,
+       &g_sKentec320x240x16_SSD2119, 0, 30, 60, 40,
        CANVAS_STYLE_TEXT, 0, 0, ClrBlack,
        &g_sFontCm18, " Bass ", 0, 0);
 Canvas(g_sEQ2, PanelList+2, &g_sEQ1, 0,
-       &g_sKentec320x240x16_SSD2119, 55, 150, 50, 40,
+       &g_sKentec320x240x16_SSD2119, 50, 30, 60, 40,
        CANVAS_STYLE_TEXT, 0, 0, ClrBlack,
        &g_sFontCm18, " Mid ", 0, 0);
 Canvas(g_sEQ3, PanelList+2, &g_sEQ2, 0,
-       &g_sKentec320x240x16_SSD2119, 105, 150, 50, 40,
+       &g_sKentec320x240x16_SSD2119, 100, 30, 60, 40,
        CANVAS_STYLE_TEXT, 0, 0, ClrBlack,
        &g_sFontCm18, " Treble ", 0, 0);
 Canvas(g_sEQ4, PanelList+2, &g_sEQ3, 0,
-       &g_sKentec320x240x16_SSD2119, 210, 140, 60, 40,
+       &g_sKentec320x240x16_SSD2119, 210, 100, 60, 40,
        CANVAS_STYLE_TEXT, 0, 0, ClrBlack,
        &g_sFontCm18, " Volume ", 0, 0);
 
@@ -136,15 +137,15 @@ Canvas(g_sTitle, 0, 0, 0, &g_sKentec320x240x16_SSD2119, 50, 190, 220, 50,
        &g_sFontCm20, 0, 0, 0);
 			 
 RectangularButton(bVU, 0, 0, 0, &g_sKentec320x240x16_SSD2119, 60, 190,
-                  130, 40, PB_STYLE_FILL | PB_STYLE_TEXT | PB_STYLE_OUTLINE, ClrIndigo, ClrIndigo, ClrWhite,
+                  130, 40, PB_STYLE_FILL | PB_STYLE_TEXT | PB_STYLE_OUTLINE, ClrBlack, ClrSlateGray, ClrWhite,
                   ClrWhite, &g_sFontCm20, "VU Meter", 0, 0, 0, 0, goVU);
 									
 RectangularButton(bEQ, 0, 0, 0, &g_sKentec320x240x16_SSD2119, 190, 190,
-                  130, 40, PB_STYLE_FILL | PB_STYLE_TEXT | PB_STYLE_OUTLINE, ClrIndigo, ClrIndigo, ClrWhite,
+                  130, 40, PB_STYLE_FILL | PB_STYLE_TEXT | PB_STYLE_OUTLINE, ClrBlack, ClrSlateGray, ClrWhite,
                   ClrWhite, &g_sFontCm20, "Equalizer", 0 ,0, 0, 0, goEQ);
 									
 RectangularButton(bStart, 0, 0, 0, &g_sKentec320x240x16_SSD2119, 0, 190,
-                  60, 40, PB_STYLE_FILL | PB_STYLE_TEXT | PB_STYLE_OUTLINE, ClrIndigo, ClrIndigo, ClrWhite,
+                  60, 40, PB_STYLE_FILL | PB_STYLE_TEXT | PB_STYLE_OUTLINE, ClrBlack, ClrSlateGray, ClrWhite,
                   ClrWhite, &g_sFontCm20, "Main", 0, 0, 0, 0, goStart);
 
 
@@ -153,56 +154,63 @@ tSliderWidget SliderList[] =
 {
     //Bass
     SliderStruct(PanelList+2, SliderList+1, 0,
-              &g_sKentec320x240x16_SSD2119, 10, 40, 35, 110, 0, 255, 127,
+              &g_sKentec320x240x16_SSD2119, 10, 60, 35, 110, 0, 255, 127,
               (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
                SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT | SL_STYLE_VERTICAL),
-              ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+              ClrRed, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
               &g_sFontCm14, "0", 0, 0, AdjustEQ),
     //Mid
     SliderStruct(PanelList+2, SliderList+2, 0,
-            &g_sKentec320x240x16_SSD2119, 60, 40, 35, 110, 0, 255, 127,
+            &g_sKentec320x240x16_SSD2119, 60, 60, 35, 110, 0, 255, 127,
             (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
              SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT | SL_STYLE_VERTICAL),
-            ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+            ClrRed, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
             &g_sFontCm14, "0", 0, 0, AdjustEQ),
     //Treble
     SliderStruct(PanelList+2, SliderList+3, 0,
-            &g_sKentec320x240x16_SSD2119, 110, 40, 35, 110, 0, 255, 127,
+            &g_sKentec320x240x16_SSD2119, 110, 60, 35, 110, 0, 255, 127,
             (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
              SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT | SL_STYLE_VERTICAL),
-            ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+            ClrRed, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
             &g_sFontCm14, "0", 0, 0, AdjustEQ),
     //Balance
     SliderStruct(PanelList+2, SliderList+4, 0,
             &g_sKentec320x240x16_SSD2119, 160, 70, 150, 25, 0, 255, 127,
             (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
              SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-            ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+            ClrRed, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
             &g_sFontCm14, "100%", 0, 0, AdjustEQ),
     //Volume
     SliderStruct(PanelList+2, &g_sEQ4, 0,
-            &g_sKentec320x240x16_SSD2119, 160, 110, 150, 25, 0, 255, 127,
+            &g_sKentec320x240x16_SSD2119, 160, 130, 150, 25, 0, 255, 127,
             (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
              SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-            ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+            ClrRed, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
             &g_sFontCm14, "100%", 0, 0, AdjustEQ),
 };
 
-tSliderWidget vum = SliderStruct(PanelList+1, 0, 0,
-                         &g_sKentec320x240x16_SSD2119, 35, 70, 250, 75, 0, 255, 0,
+tSliderWidget vuml = SliderStruct(PanelList+1, &g_sVU, 0,
+                         &g_sKentec320x240x16_SSD2119, 35, 70, 250, 40, 0, 1000, 0,
                          (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
-                          SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT | SL_STYLE_LOCKED),
-                         ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+                          SL_STYLE_LOCKED),
+                         ClrRed, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
                          &g_sFontCm14, 0, 0, 0, 0);
+tSliderWidget vumr = SliderStruct(PanelList+1, &g_sVU, 0,
+                         &g_sKentec320x240x16_SSD2119, 35, 130, 250, 40, 0, 1000, 0,
+                         (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
+                          SL_STYLE_LOCKED),
+                         ClrRed, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+                         &g_sFontCm14, 0, 0, 0, 0);
+
 
 // Panels
 tCanvasWidget PanelList[] = {
     CanvasStruct(0, 0, &g_sMain, &g_sKentec320x240x16_SSD2119, 0, 24,
-                          320, 166, CANVAS_STYLE_FILL, ClrGainsboro, 0, 0, 0, 0, 0, 0),
-    CanvasStruct(0, 0, &vum, &g_sKentec320x240x16_SSD2119, 0, 24,
-                             320, 166, CANVAS_STYLE_FILL, ClrGainsboro, 0, 0, 0, 0, 0, 0),
+                          320, 166, CANVAS_STYLE_FILL, ClrWhite, 0, 0, 0, 0, 0, 0),
+    CanvasStruct(0, 0, &vuml, &g_sKentec320x240x16_SSD2119, 0, 24,
+                             320, 166, CANVAS_STYLE_FILL, ClrWhite, 0, 0, 0, 0, 0, 0),
     CanvasStruct(0, 0, &SliderList, &g_sKentec320x240x16_SSD2119, 0, 24,
-                             320, 166, CANVAS_STYLE_FILL, ClrGainsboro, 0, 0, 0, 0, 0, 0)
+                             320, 166, CANVAS_STYLE_FILL, ClrWhite, 0, 0, 0, 0, 0, 0)
 };
 
 
@@ -226,7 +234,7 @@ int main(void)
     sRect.i16YMin = 0;
     sRect.i16XMax = GrContextDpyWidthGet(&sContext) - 1;
     sRect.i16YMax = 23;
-    GrContextForegroundSet(&sContext, ClrDarkSlateBlue);
+    GrContextForegroundSet(&sContext, ClrBlack);
     GrRectFill(&sContext, &sRect);
 
     // Put a white box around the banner.
@@ -301,7 +309,6 @@ int main(void)
     EQ.bass = 127;
     EQ.mid = 127;
     EQ.treble = 127;
-    EQ.Vol = 127;
     EQ.Vol = 128;
     EQ.balance = 128;
     balfact_l= 1;
@@ -328,7 +335,7 @@ int main(void)
 void SwitchPanel(){
     WidgetAdd(WIDGET_ROOT,(tWidget*)(PanelList + PanelNum));
     WidgetPaint((tWidget*)(tWidget*)(PanelList + PanelNum));
-    GrContextForegroundSet(&sContext, ClrDarkSlateBlue);
+    GrContextForegroundSet(&sContext, ClrBlack);
     GrRectFill(&sContext, &sRect);
     GrContextForegroundSet(&sContext, ClrWhite);
     GrRectDraw(&sContext, &sRect);
@@ -440,11 +447,11 @@ void UpdateEQ(){
     // 00: Base L/R; 01: Mid L/R; 10: Treble L/R; 11: Volume L/R
 
     // Bass 00
-	i2cSend(0x2C,EQ.bass,EQ.bass);
+	i2cSend(0x2C,EQ.bass/2,EQ.bass/2);
     // Mid 01
-    i2cSend(0x2D,EQ.mid,EQ.mid);
+    i2cSend(0x2E,EQ.mid/2,EQ.mid/2);
 	// Tre 10
-	i2cSend(0x2E,EQ.treble,EQ.treble);
+	i2cSend(0x2D,EQ.treble/2,EQ.treble/2);
 	// Vol 11
 	i2cSend(0x2F,EQ.Vol*balfact_l,EQ.Vol*balfact_r);
 }
@@ -488,7 +495,7 @@ void goEQ(tWidget *pWidget)
     UpdateSliders();
 }
 
-// Set the value of Sliders when switching into panel EQ                        NEED CHANGE
+// Set the value of Sliders when switching into panel EQ
 void UpdateSliders()
 {
     static char pcSliderText1[6];
@@ -555,7 +562,7 @@ void UpdateSliders()
     WidgetPaint((tWidget*)&SliderList[4]);
 }
 
-// Functions for each panel
+// Functions for Main Panel
 void PnMain(tWidget* pWidget, tContext* pContext)
 {
     GrContextFontSet(pContext, &g_sFontCm18);
@@ -590,22 +597,24 @@ void SampleVU(){
         FIFOptr = 0;
     }
 
-    uint8_t i;
-    for (i = 0;i < 2;i++){
-        ADCFIFO[FIFOptr] = ADCCache[i];
-        FIFOptr++;
-    }
+    ADCFIFOL[FIFOptr] = ADCCache[0];
+    ADCFIFOR[FIFOptr] = ADCCache[1];
+    FIFOptr++;
 }
 
 // does exactly same as name suggests
 void UpdateVU(){
-    double sum;
+    long double suml,sumr;
     uint16_t i;
-    static char text[8];
+    suml = 0;
+    sumr = 0;
+    //static char text[8];
     for (i = 0;i < (BufferSize - 1);i++){
-        sum += (double)ADCFIFO[i] / 4095 * 3.3;
+        suml += ADCFIFOL[i];
+        sumr += ADCFIFOR[i];
     }
-    VU = sum / 5 / BufferSize;
+    /*
+    VU = (double)sum * 3.3 / 4095 / BufferSize / 5.43 * 10 * 1.414;
     VUlog = 20 * log10(VU / PI * 2.19089023);
     VUparam1 = (int)VUlog;
     if (VUlog < 0){
@@ -616,6 +625,11 @@ void UpdateVU(){
     }
     usprintf(text, "%d.%d dB VU", VUparam1, VUparam2);
     SliderTextSet(&vum, text);
-	SliderValueSet(&vum, VU * 255 * 2.5);
-    WidgetPaint((tWidget*)&vum);
+    */
+    VUL = suml * 5 / 4095;
+    VUR = sumr * 5 / 4095;
+	SliderValueSet(&vuml, VUL * 10 * 3);
+    WidgetPaint((tWidget*)&vuml);
+	SliderValueSet(&vumr, VUR * 10 * 3);
+    WidgetPaint((tWidget*)&vumr);
 }
